@@ -146,7 +146,7 @@ def compute_advantages_and_returns(args, rollout_data):
         ]
     rewards = torch.tensor(rewards, dtype=torch.float32, device=kl[0].device)
 
-    if args.advantage_estimator == "grpo":
+    if args.advantage_estimator in ["grpo", "gspo"]:
         returns = get_grpo_returns(rewards, kl)
         # TODO: is the copy necessary?
         advantages = [r for r in returns]
@@ -246,12 +246,12 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean):
 
     if args.advantage_estimator == "gspo":
         full_log_probs = [
-            all_gather_with_cp(log_prob, resposne_length)
-            for log_prob, resposne_length in zip(log_probs, response_lengths)
+            all_gather_with_cp(log_prob, response_length)
+            for log_prob, response_length in zip(log_probs, response_lengths)
         ]
         full_old_log_probs = [
-            all_gather_with_cp(old_log_prob, resposne_length)
-            for old_log_prob, resposne_length in zip(old_log_probs, response_lengths)
+            all_gather_with_cp(old_log_prob, response_length)
+            for old_log_prob, response_length in zip(old_log_probs, response_lengths)
         ]
         ppo_kl = [(old_logprob - log_prob).mean() for log_prob, old_logprob in zip(full_log_probs, full_old_log_probs)]
         ppo_kl = [kl.expand_as(log_prob) for kl, log_prob in zip(ppo_kl, log_probs)]
