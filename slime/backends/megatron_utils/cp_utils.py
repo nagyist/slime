@@ -101,7 +101,7 @@ def get_sum_of_sample_mean(
     return sum_of_sample_mean if not calculate_per_token_loss else sum_of_token
 
 
-def all_gather_with_cp(tensor: torch.Tensor, full_length: int):
+def all_gather_with_cp(tensor: torch.Tensor, total_length: int, response_length: int):
     """
     Gather tensors across all ranks in the context parallel group.
     """
@@ -111,19 +111,30 @@ def all_gather_with_cp(tensor: torch.Tensor, full_length: int):
     if cp_size == 1:
         return tensor
 
-    chunk_size = tensor.size(0) // 2
+    _, _, _, tokens_offset = get_logits_and_tokens_offset_with_cp(total_length, response_length)
 
-    if tensor.dim() == 0:
-        tensor = tensor.unsqueeze(0)
+    prompt_length = total_length - response_length
+    left = tokens_offset[0][0] - prompt_length
+    mid = tokens_offset[1][0] - tokens_offset[0][1]
+    right = total_length - tokens_offset[1][1]
 
-    # use dist.nn.all_gather instead of dist.all_gather to make sure the gradient flow is correct.
-    gathered_tensors = dist.nn.all_gather(tensor, group=cp_group)
+    chunk_0 = tensor[: tokens_offset[0][1] - tokens_offset[0][0]]
+    chunk_1 = tensor[tokens_offset[0][1] - tokens_offset[0][0] :]
 
-    chunks = [(t[:chunk_size], t[chunk_size:]) for t in gathered_tensors]
-    full_tensor = torch.concat(
-        [chunk[0] for chunk in chunks] + [chunk[1] for chunk in chunks[::-1]],
+    def zero(len):
+        return torch.zeros([len] + list(tensor.shape[1:]), dtype=tensor.dtype, device=tensor.device)
+
+    full_tensor = torch.cat(
+        [
+            zero(left),
+            chunk_0,
+            zero(mid),
+            chunk_1,
+            zero(right),
+        ],
         dim=0,
-    )[:full_length]
+    )
+    full_tensor = dist.nn.all_reduce(full_tensor, group=cp_group)
     return full_tensor
 
 

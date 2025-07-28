@@ -246,12 +246,12 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean):
 
     if args.advantage_estimator == "gspo":
         full_log_probs = [
-            all_gather_with_cp(log_prob, response_length)
-            for log_prob, response_length in zip(log_probs, response_lengths)
+            all_gather_with_cp(log_prob, total_length, response_length)
+            for log_prob, total_length, response_length in zip(log_probs, total_lengths, response_lengths)
         ]
         full_old_log_probs = [
-            all_gather_with_cp(old_log_prob, response_length)
-            for old_log_prob, response_length in zip(old_log_probs, response_lengths)
+            all_gather_with_cp(old_log_prob, total_length, response_length)
+            for old_log_prob, total_length, response_length in zip(old_log_probs, total_lengths, response_lengths)
         ]
         loss_masks = batch["loss_masks"]
         ppo_kl = [
