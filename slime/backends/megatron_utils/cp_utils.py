@@ -107,14 +107,17 @@ def all_gather_with_cp(tensor: torch.Tensor, full_length: int):
     """
     cp_group = mpu.get_context_parallel_group()
     cp_size = mpu.get_context_parallel_world_size()
+
+    if cp_size == 1:
+        return tensor
+
     chunk_size = tensor.size(0) // 2
 
     if tensor.dim() == 0:
         tensor = tensor.unsqueeze(0)
 
-    gathered_tensors = [torch.empty_like(tensor) for _ in range(cp_size)]
     # use dist.nn.all_gather instead of dist.all_gather to make sure the gradient flow is correct.
-    dist.nn.all_gather(gathered_tensors, tensor, group=cp_group)
+    gathered_tensors = dist.nn.all_gather(tensor, group=cp_group)
 
     chunks = [(t[:chunk_size], t[chunk_size:]) for t in gathered_tensors]
     full_tensor = torch.concat(
